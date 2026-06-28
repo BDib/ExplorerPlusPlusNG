@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, dev, development, 'version-*' ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ master, dev, development ]
+
+jobs:
+  build:
+    name: Build (${{ matrix.platform }}, ${{ matrix.configuration }})
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [Win32, x64, ARM64]
+        configuration: [Debug, Release]
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Setup NuGet
+      uses: NuGet/setup-nuget@v2
+
+    - name: Restore vcpkg
+      run: .\Explorer++\ThirdParty\vcpkg\bootstrap-vcpkg.bat
+
+    - name: Build Solution
+      run: msbuild Explorer++\Explorer++.sln /p:Configuration=${{ matrix.configuration }} /p:Platform=${{ matrix.platform }} /m
+
+    - name: Build Installer
+      run: msbuild Explorer++\Installer\Installer.wixproj /p:Configuration=${{ matrix.configuration }} /p:Platform=${{ matrix.platform }}
+      continue-on-error: true
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: explorerpp-${{ matrix.platform }}-${{ matrix.configuration }}
+        path: |
+          BIN/${{ matrix.platform }}/${{ matrix.configuration }}/Explorer++.exe
+          BIN/${{ matrix.platform }}/${{ matrix.configuration }}/explorerpp_${{ matrix.platform }}_setup.msi

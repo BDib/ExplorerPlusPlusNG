@@ -1,0 +1,37 @@
+<Project>
+  <Import Project="$(MSBuildThisFileDirectory)Explorer++\ThirdParty\vcpkg\scripts\buildsystems\msbuild\vcpkg.props" />
+
+  <PropertyGroup>
+    <OutDir>$(MSBuildThisFileDirectory)Bin\$(Platform)\$(Configuration)\</OutDir>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)obj\$(Platform)\$(Configuration)\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Globals">
+    <TreatAsLocalProperty>OutDir;IntDir</TreatAsLocalProperty>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugType>None</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <GenerateDebugInformation>false</GenerateDebugInformation>
+  </PropertyGroup>
+
+  <ItemDefinitionGroup Condition="'$(Configuration)' == 'Release'">
+    <ClCompile>
+      <DebugInformationFormat>None</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <ProgramDatabaseFile />
+      <ImportLibrary>$(IntermediateOutputPath)$(TargetName).lib</ImportLibrary>
+	  <AdditionalOptions>/DEBUG:NONE %(AdditionalOptions)</AdditionalOptions>
+    </Link>
+  </ItemDefinitionGroup>
+
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+</Project>

@@ -1,0 +1,26 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "x64-release",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/build/x64",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" },
+      "architecture": "x64"
+    },
+    {
+      "name": "win32-release",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/build/win32",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" },
+      "architecture": "Win32"
+    },
+    {
+      "name": "arm64-release",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/build/arm64",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" },
+      "architecture": "ARM64"
+    }
+  ]
+}
