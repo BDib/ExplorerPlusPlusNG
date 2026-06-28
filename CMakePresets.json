@@ -5,20 +5,15 @@
       "name": "base",
       "hidden": true,
       "generator": "Visual Studio 17 2022",
-      "binaryDir": "${sourceDir}/build/${presetName}",
-      "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": {
-          "value": "${sourceDir}/Explorer++/ThirdParty/vcpkg/scripts/buildsystems/vcpkg.cmake",
-          "type": "FILEPATH"
-        }
-      }
+      "binaryDir": "${sourceDir}/build/${presetName}"
     },
     {
       "name": "x64-debug",
       "inherits": "base",
       "architecture": "x64",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static"
       }
     },
     {
@@ -26,7 +21,8 @@
       "inherits": "base",
       "architecture": "x64",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static"
       }
     },
     {
@@ -34,7 +30,8 @@
       "inherits": "base",
       "architecture": "Win32",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "VCPKG_TARGET_TRIPLET": "x86-windows-static"
       }
     },
     {
@@ -42,7 +39,8 @@
       "inherits": "base",
       "architecture": "Win32",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "VCPKG_TARGET_TRIPLET": "x86-windows-static"
       }
     },
     {
@@ -50,7 +48,8 @@
       "inherits": "base",
       "architecture": "ARM64",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "VCPKG_TARGET_TRIPLET": "arm64-windows-static"
       }
     },
     {
@@ -58,7 +57,8 @@
       "inherits": "base",
       "architecture": "ARM64",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "VCPKG_TARGET_TRIPLET": "arm64-windows-static"
       }
     }
   ],

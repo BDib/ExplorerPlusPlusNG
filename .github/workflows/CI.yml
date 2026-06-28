@@ -22,11 +22,8 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Restore vcpkg
-      run: .\Explorer++\ThirdParty\vcpkg\bootstrap-vcpkg.bat
-
     - name: Configure CMake
-      run: cmake --preset ${{ matrix.platform }}-${{ matrix.configuration }}
+      run: cmake --preset ${{ matrix.platform }}-${{ matrix.configuration }} "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
 
     - name: Build
       run: cmake --build --preset ${{ matrix.platform }}-${{ matrix.configuration }}
