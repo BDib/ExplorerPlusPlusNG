@@ -18,7 +18,7 @@ Explorer++ is a lightweight and fast file manager for Windows.
 * Switch between icon, list, detail, thumbnail and tile view
 * Filter files
 * **ARM64 support**
-* **Modernized build system with WiX v5 and CMake support**
+* **Modernized build system with CMake and vcpkg support**
 
 ## Latest Builds
 
@@ -26,23 +26,22 @@ Latest builds are available via GitHub Actions.
 
 ## Building Explorer++
 
-### Using PowerShell (Recommended)
-Run `.\build.ps1` to build the default configuration (Release x64).
-Options:
-- `-Configuration [Debug|Release]`
-- `-Platform [Win32|x64|ARM64]`
-- `-Installer` (Builds the MSI package)
-- `-Clean`
+Explorer++ now uses a modern CMake build system. For detailed instructions, see [BUILDING.md](BUILDING.md).
 
-### Using Visual Studio
-Open `Explorer++\Explorer++.sln` and build. Artifacts will be located in the `BIN/` directory.
+### Quick Start (PowerShell)
+The recommended way to build is using the `build.ps1` script:
+```powershell
+.\build.ps1
+```
+This will build all platforms (x64, Win32, ARM64) in both Debug and Release modes.
 
-### Using CMake
+### Using Visual Studio 2022+
+Open Visual Studio and **Open Folder** pointing to the repository root. Visual Studio will automatically configure the project using CMake. Select a preset (e.g., `x64-release`) from the configuration dropdown and build.
+
+### Using CMake CLI
 ```bash
-mkdir build
-cd build
-cmake .. -DCMAKE_TOOLCHAIN_FILE=C:/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake
-cmake --build .
+cmake --preset x64-release
+cmake --build --preset x64-release
 ```
 
 ## Documentation
