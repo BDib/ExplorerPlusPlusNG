@@ -6,8 +6,8 @@ project(ExplorerPP LANGUAGES C CXX RC)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Unicode support
-add_definitions(-DUNICODE -D_UNICODE)
+# Unicode support and global WIN32 definition
+add_definitions(-DUNICODE -D_UNICODE -DWIN32)
 
 # Options for release mode
 set(EXPLORERPP_RELEASE_MODE "" CACHE STRING "Release mode: beta or stable")
@@ -21,7 +21,7 @@ if(MSVC)
 
     # Platform-specific definitions
     if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86" OR CMAKE_GENERATOR_PLATFORM STREQUAL "Win32")
-        add_definitions(-DBUILD_WIN32 -DWIN32)
+        add_definitions(-DBUILD_WIN32)
     elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" OR CMAKE_GENERATOR_PLATFORM STREQUAL "x64")
         add_definitions(-DBUILD_WIN64)
     elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "ARM64" OR CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")
@@ -46,22 +46,29 @@ if(MSVC)
 endif()
 
 # Output directory
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+# We set these to fixed values to avoid the auto-appending of configuration subdirectories in MSVC
+foreach(config ${CMAKE_CONFIGURATION_TYPES} Debug Release)
+    string(TOUPPER ${config} config_upper)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${config_upper} ${CMAKE_BINARY_DIR}/bin)
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${config_upper} ${CMAKE_BINARY_DIR}/bin)
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${config_upper} ${CMAKE_BINARY_DIR}/lib)
+endforeach()
 
 # Dependencies (vcpkg)
-find_package(Boost REQUIRED)
+find_package(Boost REQUIRED COMPONENTS date_time)
 find_package(cereal CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 find_package(glog CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(sol2 CONFIG REQUIRED)
 find_package(wil CONFIG REQUIRED)
-find_package(detours CONFIG REQUIRED)
 find_package(concurrencpp CONFIG REQUIRED)
 find_package(Lua REQUIRED)
 find_package(cppwinrt CONFIG REQUIRED)
+
+# detours doesn't provide a CMake config
+find_path(DETOURS_INCLUDE_DIR "detours/detours.h")
+find_library(DETOURS_LIBRARY detours)
 
 # Helper Library
 add_library(Helper STATIC)
@@ -138,12 +145,12 @@ target_sources(Helper PRIVATE
     "Explorer++/Helper/stdafx.cpp"
 )
 
-target_include_directories(Helper PUBLIC "Explorer++/Helper" "Explorer++/ThirdParty")
+target_include_directories(Helper PUBLIC "Explorer++/Helper" "Explorer++/ThirdParty" "${DETOURS_INCLUDE_DIR}")
 target_link_libraries(Helper PUBLIC
     Boost::boost
     glog::glog
     wil::wil
-    detours::detours
+    "${DETOURS_LIBRARY}"
     Microsoft::cppwinrt
     version.lib iphlpapi.lib userenv.lib wmvcore.lib rpcrt4.lib gdiplus.lib shlwapi.lib comctl32.lib uxtheme.lib
 )
@@ -174,6 +181,7 @@ set_source_files_properties(
 target_include_directories(ExplorerPP PRIVATE 
     "Explorer++/Explorer++"
     "Explorer++/ThirdParty"
+    "${LUA_INCLUDE_DIR}"
 )
 
 target_link_libraries(ExplorerPP PRIVATE
