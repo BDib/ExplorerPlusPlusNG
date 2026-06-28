@@ -1,60 +1,70 @@
 [CmdletBinding()]
 param (
-    [Parameter(HelpMessage="Specify the platforms to build (e.g., x64, Win32, ARM64)")]
-    [string[]]$Platforms = @("x64", "Win32", "ARM64"),
+    [Parameter(HelpMessage="Specify the platforms to build (e.g., x64, win32, arm64)")]
+    [string[]]$Platforms = @("x64", "win32", "arm64"),
 
-    [Parameter(HelpMessage="Specify the configurations to build (e.g., Release, Debug)")]
-    [string[]]$Configurations = @("Release", "Debug"),
+    [Parameter(HelpMessage="Specify the configurations to build (e.g., release, debug)")]
+    [string[]]$Configurations = @("release", "debug"),
 
-    [Parameter(HelpMessage="Clean the BIN folder before building")]
-    [switch]$Clean
+    [Parameter(HelpMessage="Clean the build folder before building")]
+    [switch]$Clean,
+
+    [Parameter(HelpMessage="Vcpkg toolchain file path")]
+    [string]$VcpkgToolchain
 )
 
 $ProjectRoot = Get-Item $PSScriptRoot
-$BinBase = Join-Path $ProjectRoot.FullName "BIN"
+$BuildBase = Join-Path $ProjectRoot.FullName "build"
 
 if ($PSCmdlet.MyInvocation.BoundParameters.ContainsKey("Help")) {
-    Write-Host "Usage: .\build.ps1 [-Platforms <x64|Win32|ARM64>] [-Configurations <Release|Debug>] [-Clean]"
-    Write-Host "`nDescription: Automates the multi-platform/configuration build for Explorer++."
+    Write-Host "Usage: .\build.ps1 [-Platforms <x64|win32|arm64>] [-Configurations <release|debug>] [-Clean] [-VcpkgToolchain <path>]"
+    Write-Host "`nDescription: Automates the multi-platform/configuration build for Explorer++ using CMake."
     return
 }
 
 if ($Clean) {
-    Write-Host "Cleaning BIN folder..." -ForegroundColor Cyan
-    if (Test-Path $BinBase) {
-        Remove-Item -Recurse -Force $BinBase
+    Write-Host "Cleaning build folder..." -ForegroundColor Cyan
+    if (Test-Path $BuildBase) {
+        Remove-Item -Recurse -Force $BuildBase
     }
     exit
 }
 
-Write-Host "Building Explorer++ ($Platform | $Configuration)..." -ForegroundColor Cyan
-
-$MSBuildPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
-if (-not $MSBuildPath) {
-    Write-Error "MSBuild not found. Please ensure Visual Studio is installed."
-    exit 1
+# Try to find vcpkg toolchain if not provided
+if (-not $VcpkgToolchain) {
+    if ($env:VCPKG_INSTALLATION_ROOT) {
+        $VcpkgToolchain = "$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+    } elseif (Test-Path "$ProjectRoot/Explorer++/ThirdParty/vcpkg/scripts/buildsystems/vcpkg.cmake") {
+        $VcpkgToolchain = "$ProjectRoot/Explorer++/ThirdParty/vcpkg/scripts/buildsystems/vcpkg.cmake"
+        # Bootstrap if exe is missing
+        if (-not (Test-Path "$ProjectRoot/Explorer++/ThirdParty/vcpkg/vcpkg.exe")) {
+            Write-Host "Bootstrapping submodule vcpkg..." -ForegroundColor Cyan
+            & "$ProjectRoot/Explorer++/ThirdParty/vcpkg/bootstrap-vcpkg.bat"
+        }
+    }
 }
 
-$MSBuildExe = Join-Path $MSBuildPath "MSBuild\Current\Bin\MSBuild.exe"
-
 foreach ($p in $Platforms) {
-    # Map 'x86' to 'Win32' for MSBuild
-    $targetPlatform = if ($p -eq "x86") { "Win32" } else { $p }
-    
     foreach ($c in $Configurations) {
-        # Define platform/configuration-specific output folder
-        $outDir = Join-Path $BinBase (Join-Path $p $c)
+        $preset = "$($p.ToLower())-$($c.ToLower())"
+        Write-Host "--- Building Preset: $preset ---" -ForegroundColor Cyan
         
-        Write-Host "--- Building Platform: $p | Configuration: $c ---" -ForegroundColor Cyan
-        
-        & $MSBuildExe "Explorer++\Explorer++.sln" `
-            /p:Configuration=$c `
-            /p:Platform=$targetPlatform `
-            /p:OutDir=$outDir `
-            /m /t:Build
+        $cmakeArgs = @("--preset", $preset)
+        if ($VcpkgToolchain) {
+            $cmakeArgs += "-DCMAKE_TOOLCHAIN_FILE=$VcpkgToolchain"
+        }
 
+        # Configure
+        & cmake @cmakeArgs
         if ($LASTEXITCODE -ne 0) {
-            Write-Error "Build failed for $p | $c!"
+            Write-Error "Configure failed for $preset!"
+            exit $LASTEXITCODE
+        }
+
+        # Build
+        & cmake --build --preset $preset
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Build failed for $preset!"
             exit $LASTEXITCODE
         }
     }

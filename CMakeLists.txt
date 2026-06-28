@@ -1,442 +1,220 @@
 cmake_minimum_required(VERSION 3.20)
-project(ExplorerPP LANGUAGES CXX)
+
+# Project setup
+project(ExplorerPP LANGUAGES C CXX RC)
 
 set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_SYSTEM_VERSION "10.0.28000.0")
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /DUNICODE /D_UNICODE")
 
-if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-    add_definitions(-DBUILD_WIN64)
-else()
-    add_definitions(-DBUILD_WIN32)
+# Unicode support and global WIN32 definition
+add_definitions(-DUNICODE -D_UNICODE -DWIN32)
+
+# Options for release mode
+set(EXPLORERPP_RELEASE_MODE "" CACHE STRING "Release mode: beta or stable")
+set(EXPLORERPP_BUILD_NUMBER "" CACHE STRING "Build number")
+
+# MSVC specific settings
+if(MSVC)
+    add_compile_options(/W4 /permissive- /utf-8)
+    # Set Runtime Library: MultiThreaded (static) for Release, MultiThreadedDebug (static) for Debug
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
+    # Platform-specific definitions
+    if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86" OR CMAKE_GENERATOR_PLATFORM STREQUAL "Win32")
+        add_definitions(-DBUILD_WIN32)
+    elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" OR CMAKE_GENERATOR_PLATFORM STREQUAL "x64")
+        add_definitions(-DBUILD_WIN64)
+    elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "ARM64" OR CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")
+        add_definitions(-DBUILD_ARM64)
+    endif()
+
+    add_definitions(-DPLATFORM_TOOLSET_VERSION=${MSVC_TOOLSET_VERSION})
+    add_definitions(-DNOMINMAX -D_WIN32_WINNT=0x0A00)
+
+    if(EXPLORERPP_RELEASE_MODE STREQUAL "beta")
+        add_definitions(-DENVIRONMENT_RELEASE_BETA=1)
+    elseif(EXPLORERPP_RELEASE_MODE STREQUAL "stable")
+        add_definitions(-DENVIRONMENT_RELEASE_STABLE=1)
+    endif()
+
+    if(NOT EXPLORERPP_BUILD_NUMBER STREQUAL "")
+        add_definitions(-DENVIRONMENT_BUILD_NUMBER=${EXPLORERPP_BUILD_NUMBER})
+    endif()
+
+    # Precompiled headers optimization
+    set(CMAKE_PCH_WARN_WITH_PCH OFF)
 endif()
 
-add_definitions(
-    -DNOMINMAX 
-    -DUNICODE 
-    -D_UNICODE 
-	-D_WIN32_WINNT=0x0A00
-    -DWIN32 
-)
+# Output directory
+# We set these to fixed values to avoid the auto-appending of configuration subdirectories in MSVC
+foreach(config ${CMAKE_CONFIGURATION_TYPES} Debug Release)
+    string(TOUPPER ${config} config_upper)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${config_upper} ${CMAKE_BINARY_DIR}/bin)
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${config_upper} ${CMAKE_BINARY_DIR}/bin)
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${config_upper} ${CMAKE_BINARY_DIR}/lib)
+endforeach()
 
-# 1. Dependency Management (vcpkg)
-#find_package(glog CONFIG REQUIRED)
+# Dependencies (vcpkg)
+find_package(Boost REQUIRED COMPONENTS date_time)
+find_package(cereal CONFIG REQUIRED)
+find_package(fmt CONFIG REQUIRED)
+find_package(glog CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
+find_package(sol2 CONFIG REQUIRED)
+find_package(wil CONFIG REQUIRED)
+find_package(concurrencpp CONFIG REQUIRED)
+find_package(Lua REQUIRED)
+find_package(cppwinrt CONFIG REQUIRED)
 
-# 2. Helper Library
-# Based on your Helper.vcxproj, this is a static collection of source files
+# detours doesn't provide a CMake config
+find_path(DETOURS_INCLUDE_DIR "detours/detours.h")
+find_library(DETOURS_LIBRARY detours)
+
+# Helper Library
 add_library(Helper STATIC)
-target_sources(Helper PRIVATE 
-	"Explorer++/Helper/BaseWindow.cpp"
-	"Explorer++/Helper/BulkClipboardWriter.cpp"
-	"Explorer++/Helper/CachedIcons.cpp"
-	"Explorer++/Helper/Clipboard.cpp"
-	"Explorer++/Helper/ClipboardHelper.cpp"
-	"Explorer++/Helper/ClipboardWatcher.cpp"
-	"Explorer++/Helper/ComboBox.cpp"
-	"Explorer++/Helper/ComboBoxHelper.cpp"
-	"Explorer++/Helper/Console.cpp"
-	"Explorer++/Helper/Controls.cpp"
-	"Explorer++/Helper/DataExchangeHelper.cpp"
-	"Explorer++/Helper/DataObjectImpl.cpp"
-	"Explorer++/Helper/DataObjectWrapper.cpp"
-	"Explorer++/Helper/DetoursHelper.cpp"
-	"Explorer++/Helper/DialogSettings.cpp"
-	"Explorer++/Helper/DoubleBufferedPaint.cpp"
-	"Explorer++/Helper/DpiCompatibility.cpp"
-	"Explorer++/Helper/DragDropHelper.cpp"
-	"Explorer++/Helper/DriveInfo.cpp"
-	"Explorer++/Helper/DropHandler.cpp"
-	"Explorer++/Helper/DropSourceImpl.cpp"
-	"Explorer++/Helper/DropTargetWindow.cpp"
-	"Explorer++/Helper/EnumFormatEtcImpl.cpp"
-	"Explorer++/Helper/FileActionHandler.cpp"
-	"Explorer++/Helper/FileDialogs.cpp"
-	"Explorer++/Helper/FileOperations.cpp"
-	"Explorer++/Helper/FolderSize.cpp"
-	"Explorer++/Helper/GdiplusHelper.cpp"
-	"Explorer++/Helper/Helper.cpp"
-	"Explorer++/Helper/ImageHelper.cpp"
-	"Explorer++/Helper/KeyboardStateImpl.cpp"
-	"Explorer++/Helper/ListViewHelper.cpp"
-	"Explorer++/Helper/MenuHelper.cpp"
-	"Explorer++/Helper/MessageForwarder.cpp"
-	"Explorer++/Helper/MessageWindowHelper.cpp"
-	"Explorer++/Helper/Pidl.cpp"
-	"Explorer++/Helper/PidlHelper.cpp"
-	"Explorer++/Helper/ProcessHelper.cpp"
-	"Explorer++/Helper/ReferenceCount.cpp"
-	"Explorer++/Helper/RegistrySettings.cpp"
-	"Explorer++/Helper/ResizableDialogHelper.cpp"
-	"Explorer++/Helper/ResourceHelper.cpp"
-	"Explorer++/Helper/RichEditHelper.cpp"
-	"Explorer++/Helper/ScopedBitmapLock.cpp"
-	"Explorer++/Helper/ScopedRedrawDisabler.cpp"
-	"Explorer++/Helper/ScopedStopSource.cpp"
-	"Explorer++/Helper/ServiceProviderBase.cpp"
-	"Explorer++/Helper/SetDefaultFileManager.cpp"
-	"Explorer++/Helper/ShellBackgroundContextMenu.cpp"
-	"Explorer++/Helper/ShellBackgroundContextMenuDelegate.cpp"
-	"Explorer++/Helper/ShellContextMenu.cpp"
-	"Explorer++/Helper/ShellContextMenuBuilder.cpp"
-	"Explorer++/Helper/ShellContextMenuIdGenerator.cpp"
-	"Explorer++/Helper/ShellContextMenuIdRemapper.cpp"
-	"Explorer++/Helper/ShellDropTargetWindow.cpp"
-	"Explorer++/Helper/ShellHelper.cpp"
-	"Explorer++/Helper/ShellItemContextMenu.cpp"
-	"Explorer++/Helper/StringHelper.cpp"
-	"Explorer++/Helper/SystemClipboardStore.cpp"
-	"Explorer++/Helper/SystemClockImpl.cpp"
-	"Explorer++/Helper/TabHelper.cpp"
-	"Explorer++/Helper/TimeHelper.cpp"
-	"Explorer++/Helper/UniqueResources.cpp"
-	"Explorer++/Helper/UniqueThreadId.cpp"
-	"Explorer++/Helper/WilExtraTypes.cpp"
-	"Explorer++/Helper/WindowHelper.cpp"
-	"Explorer++/Helper/WindowSubclass.cpp"
-	"Explorer++/Helper/XMLSettings.cpp"
-	"Explorer++/Helper/stdafx.cpp"
+
+target_sources(Helper PRIVATE
+    "Explorer++/Helper/BaseWindow.cpp"
+    "Explorer++/Helper/BulkClipboardWriter.cpp"
+    "Explorer++/Helper/CachedIcons.cpp"
+    "Explorer++/Helper/Clipboard.cpp"
+    "Explorer++/Helper/ClipboardHelper.cpp"
+    "Explorer++/Helper/ClipboardWatcher.cpp"
+    "Explorer++/Helper/ComboBox.cpp"
+    "Explorer++/Helper/ComboBoxHelper.cpp"
+    "Explorer++/Helper/Console.cpp"
+    "Explorer++/Helper/Controls.cpp"
+    "Explorer++/Helper/DataExchangeHelper.cpp"
+    "Explorer++/Helper/DataObjectImpl.cpp"
+    "Explorer++/Helper/DataObjectWrapper.cpp"
+    "Explorer++/Helper/DetoursHelper.cpp"
+    "Explorer++/Helper/DialogSettings.cpp"
+    "Explorer++/Helper/DoubleBufferedPaint.cpp"
+    "Explorer++/Helper/DpiCompatibility.cpp"
+    "Explorer++/Helper/DragDropHelper.cpp"
+    "Explorer++/Helper/DriveInfo.cpp"
+    "Explorer++/Helper/DropHandler.cpp"
+    "Explorer++/Helper/DropSourceImpl.cpp"
+    "Explorer++/Helper/DropTargetWindow.cpp"
+    "Explorer++/Helper/EnumFormatEtcImpl.cpp"
+    "Explorer++/Helper/FileActionHandler.cpp"
+    "Explorer++/Helper/FileDialogs.cpp"
+    "Explorer++/Helper/FileOperations.cpp"
+    "Explorer++/Helper/FolderSize.cpp"
+    "Explorer++/Helper/GdiplusHelper.cpp"
+    "Explorer++/Helper/Helper.cpp"
+    "Explorer++/Helper/ImageHelper.cpp"
+    "Explorer++/Helper/KeyboardStateImpl.cpp"
+    "Explorer++/Helper/ListViewHelper.cpp"
+    "Explorer++/Helper/MenuHelper.cpp"
+    "Explorer++/Helper/MessageForwarder.cpp"
+    "Explorer++/Helper/MessageWindowHelper.cpp"
+    "Explorer++/Helper/Pidl.cpp"
+    "Explorer++/Helper/PidlHelper.cpp"
+    "Explorer++/Helper/ProcessHelper.cpp"
+    "Explorer++/Helper/ReferenceCount.cpp"
+    "Explorer++/Helper/RegistrySettings.cpp"
+    "Explorer++/Helper/ResizableDialogHelper.cpp"
+    "Explorer++/Helper/ResourceHelper.cpp"
+    "Explorer++/Helper/RichEditHelper.cpp"
+    "Explorer++/Helper/ScopedBitmapLock.cpp"
+    "Explorer++/Helper/ScopedRedrawDisabler.cpp"
+    "Explorer++/Helper/ScopedStopSource.cpp"
+    "Explorer++/Helper/ServiceProviderBase.cpp"
+    "Explorer++/Helper/SetDefaultFileManager.cpp"
+    "Explorer++/Helper/ShellBackgroundContextMenu.cpp"
+    "Explorer++/Helper/ShellBackgroundContextMenuDelegate.cpp"
+    "Explorer++/Helper/ShellContextMenu.cpp"
+    "Explorer++/Helper/ShellContextMenuBuilder.cpp"
+    "Explorer++/Helper/ShellContextMenuIdGenerator.cpp"
+    "Explorer++/Helper/ShellContextMenuIdRemapper.cpp"
+    "Explorer++/Helper/ShellDropTargetWindow.cpp"
+    "Explorer++/Helper/ShellHelper.cpp"
+    "Explorer++/Helper/ShellItemContextMenu.cpp"
+    "Explorer++/Helper/StringHelper.cpp"
+    "Explorer++/Helper/SystemClipboardStore.cpp"
+    "Explorer++/Helper/SystemClockImpl.cpp"
+    "Explorer++/Helper/TabHelper.cpp"
+    "Explorer++/Helper/TimeHelper.cpp"
+    "Explorer++/Helper/UniqueResources.cpp"
+    "Explorer++/Helper/UniqueThreadId.cpp"
+    "Explorer++/Helper/WilExtraTypes.cpp"
+    "Explorer++/Helper/WindowHelper.cpp"
+    "Explorer++/Helper/WindowSubclass.cpp"
+    "Explorer++/Helper/XMLSettings.cpp"
+    "Explorer++/Helper/stdafx.cpp"
 )
 
-target_link_libraries(Helper PUBLIC glog::glog)
+target_include_directories(Helper PUBLIC "Explorer++/Helper" "Explorer++/ThirdParty" "${DETOURS_INCLUDE_DIR}")
+target_link_libraries(Helper PUBLIC
+    Boost::boost
+    glog::glog
+    wil::wil
+    "${DETOURS_LIBRARY}"
+    Microsoft::cppwinrt
+    version.lib iphlpapi.lib userenv.lib wmvcore.lib rpcrt4.lib gdiplus.lib shlwapi.lib comctl32.lib uxtheme.lib
+)
 target_precompile_headers(Helper PRIVATE "Explorer++/Helper/stdafx.h")
-target_include_directories(Helper PUBLIC "Explorer++/Helper")
 
+# Explorer++ Executable
 add_executable(ExplorerPP WIN32)
+set_target_properties(ExplorerPP PROPERTIES OUTPUT_NAME "Explorer++")
 
-set_target_properties(ExplorerPP PROPERTIES VS_GLOBAL_CharacterSet "Unicode")
-file(GLOB_RECURSE MAIN_SOURCES 	"Explorer++/Explorer++/*.cpp")
-target_sources(ExplorerPP PRIVATE
-	"Explorer++/Explorer++/Explorer++.rc"
-	"Explorer++/Explorer++/AboutDialog.cpp"
-	"Explorer++/Explorer++/AcceleratorHelper.cpp"
-	"Explorer++/Explorer++/AcceleratorManager.cpp"
-	"Explorer++/Explorer++/AcceleratorUpdater.cpp"
-	"Explorer++/Explorer++/AddressBar.cpp"
-	"Explorer++/Explorer++/AddressBarView.cpp"
-	"Explorer++/Explorer++/AdvancedOptionsPage.cpp"
-	"Explorer++/Explorer++/App.cpp"
-	"Explorer++/Explorer++/AppearanceOptionsPage.cpp"
-	"Explorer++/Explorer++/Application.cpp"
-	"Explorer++/Explorer++/ApplicationContextMenu.cpp"
-	"Explorer++/Explorer++/ApplicationContextMenuController.cpp"
-	"Explorer++/Explorer++/ApplicationCrashedDialog.cpp"
-	"Explorer++/Explorer++/ApplicationDropper.cpp"
-	"Explorer++/Explorer++/ApplicationEditorDialog.cpp"
-	"Explorer++/Explorer++/ApplicationExecutorImpl.cpp"
-	"Explorer++/Explorer++/ApplicationHelper.cpp"
-	"Explorer++/Explorer++/ApplicationToolbar.cpp"
-	"Explorer++/Explorer++/ApplicationToolbarRegistryStorage.cpp"
-	"Explorer++/Explorer++/ApplicationToolbarView.cpp"
-	"Explorer++/Explorer++/ApplicationToolbarXmlStorage.cpp"
-	"Explorer++/Explorer++/AsyncIconFetcher.cpp"
-	"Explorer++/Explorer++/BackgroundContextMenuDelegate.cpp"
-	"Explorer++/Explorer++/BaseDialog.cpp"
-	"Explorer++/Explorer++/BrowserCommandController.cpp"
-	"Explorer++/Explorer++/BrowserCommandTargetManager.cpp"
-	"Explorer++/Explorer++/BrowserList.cpp"
-	"Explorer++/Explorer++/BrowserPane.cpp"
-	"Explorer++/Explorer++/BrowserWindow.cpp"
-	"Explorer++/Explorer++/ClangCLLibs.cpp"
-	"Explorer++/Explorer++/ClipboardOperations.cpp"
-	"Explorer++/Explorer++/ColorRule.cpp"
-	"Explorer++/Explorer++/ColorRuleEditorDialog.cpp"
-	"Explorer++/Explorer++/ColorRuleListView.cpp"
-	"Explorer++/Explorer++/ColorRuleModelFactory.cpp"
-	"Explorer++/Explorer++/ColorRuleRegistryStorage.cpp"
-	"Explorer++/Explorer++/ColorRuleXmlStorage.cpp"
-	"Explorer++/Explorer++/ColumnRegistryStorage.cpp"
-	"Explorer++/Explorer++/ColumnStorage.cpp"
-	"Explorer++/Explorer++/ColumnXmlStorage.cpp"
-	"Explorer++/Explorer++/CommandLine.cpp"
-	"Explorer++/Explorer++/CommandLineSplitter.cpp"
-	"Explorer++/Explorer++/ComStaThreadPoolExecutor.cpp"
-	"Explorer++/Explorer++/ConfigRegistryStorage.cpp"
-	"Explorer++/Explorer++/ConfigXmlStorage.cpp"
-	"Explorer++/Explorer++/CrashHandlerHelper.cpp"
-	"Explorer++/Explorer++/CustomFont.cpp"
-	"Explorer++/Explorer++/CustomFontStorage.cpp"
-	"Explorer++/Explorer++/CustomizeColorsDialog.cpp"
-	"Explorer++/Explorer++/DarkModeColorProvider.cpp"
-	"Explorer++/Explorer++/DarkModeManager.cpp"
-	"Explorer++/Explorer++/DefaultAccelerators.cpp"
-	"Explorer++/Explorer++/DefaultColumnRegistryStorage.cpp"
-	"Explorer++/Explorer++/DefaultColumnXmlStorage.cpp"
-	"Explorer++/Explorer++/DefaultSettingsOptionsPage.cpp"
-	"Explorer++/Explorer++/DestroyFilesDialog.cpp"
-	"Explorer++/Explorer++/DialogHelper.cpp"
-	"Explorer++/Explorer++/DialogStorageHelper.cpp"
-	"Explorer++/Explorer++/DirectoryOperationsHelper.cpp"
-	"Explorer++/Explorer++/DirectoryWatcherFactoryImpl.cpp"
-	"Explorer++/Explorer++/DisplayColoursDialog.cpp"
-	"Explorer++/Explorer++/DisplayWindow.cpp"
-	"Explorer++/Explorer++/DriveEnumeratorImpl.cpp"
-	"Explorer++/Explorer++/DriveModel.cpp"
-	"Explorer++/Explorer++/DrivesToolbar.cpp"
-	"Explorer++/Explorer++/DrivesToolbarView.cpp"
-	"Explorer++/Explorer++/DriveWatcher.cpp"
-	"Explorer++/Explorer++/DriveWatcherImpl.cpp"
-	"Explorer++/Explorer++/EventScope.cpp"
-	"Explorer++/Explorer++/EventSwitcher.cpp"
-	"Explorer++/Explorer++/EventWindow.cpp"
-	"Explorer++/Explorer++/Explorer++.cpp"
-	"Explorer++/Explorer++/FeatureList.cpp"
-	"Explorer++/Explorer++/FileOperations.cpp"
-	"Explorer++/Explorer++/FileProgressSink.cpp"
-	"Explorer++/Explorer++/FileSelectionTests.cpp"
-	"Explorer++/Explorer++/FilesFoldersOptionsPage.cpp"
-	"Explorer++/Explorer++/FileSystemWatcher.cpp"
-	"Explorer++/Explorer++/FilterDialog.cpp"
-	"Explorer++/Explorer++/FolderView.cpp"
-	"Explorer++/Explorer++/FontHelper.cpp"
-	"Explorer++/Explorer++/FontsOptionsPage.cpp"
-	"Explorer++/Explorer++/FrequentLocationsMenu.cpp"
-	"Explorer++/Explorer++/FrequentLocationsModel.cpp"
-	"Explorer++/Explorer++/FrequentLocationsRegistryStorage.cpp"
-	"Explorer++/Explorer++/FrequentLocationsTracker.cpp"
-	"Explorer++/Explorer++/FrequentLocationsXmlStorage.cpp"
-	"Explorer++/Explorer++/GeneralOptionsPage.cpp"
-	"Explorer++/Explorer++/HandleWindowState.cpp"
-	"Explorer++/Explorer++/HistoryMenu.cpp"
-	"Explorer++/Explorer++/HistoryModel.cpp"
-	"Explorer++/Explorer++/HistoryTracker.cpp"
-	"Explorer++/Explorer++/HolderWindow.cpp"
-	"Explorer++/Explorer++/IconFetcherImpl.cpp"
-	"Explorer++/Explorer++/IDropFilesCallback.cpp"
-	"Explorer++/Explorer++/LabelEditHandler.cpp"
-	"Explorer++/Explorer++/LanguageHelper.cpp"
-	"Explorer++/Explorer++/LayoutDefaults.cpp"
-	"Explorer++/Explorer++/ListView.cpp"
-	"Explorer++/Explorer++/ListViewColumnModel.cpp"
-	"Explorer++/Explorer++/ListViewHandler.cpp"
-	"Explorer++/Explorer++/ListViewModel.cpp"
-	"Explorer++/Explorer++/LocationVisitInfo.cpp"
-	"Explorer++/Explorer++/MainFontSetter.cpp"
-	"Explorer++/Explorer++/MainMenu.cpp"
-	"Explorer++/Explorer++/MainMenuHandler.cpp"
-	"Explorer++/Explorer++/MainMenuSubMenuView.cpp"
-	"Explorer++/Explorer++/MainRebar.cpp"
-	"Explorer++/Explorer++/MainRebarRegistryStorage.cpp"
-	"Explorer++/Explorer++/MainRebarView.cpp"
-	"Explorer++/Explorer++/MainRebarXmlStorage.cpp"
-	"Explorer++/Explorer++/MainTabView.cpp"
-	"Explorer++/Explorer++/MainTabViewImageListManager.cpp"
-	"Explorer++/Explorer++/MainToolbar.cpp"
-	"Explorer++/Explorer++/MainToolbarStorage.cpp"
-	"Explorer++/Explorer++/MainWindow.cpp"
-	"Explorer++/Explorer++/MainWndSwitch.cpp"
-	"Explorer++/Explorer++/MassRenameDialog.cpp"
-	"Explorer++/Explorer++/MenuBase.cpp"
-	"Explorer++/Explorer++/MenuView.cpp"
-	"Explorer++/Explorer++/MergeFilesDialog.cpp"
-	"Explorer++/Explorer++/Misc.cpp"
-	"Explorer++/Explorer++/ModelessDialogHelper.cpp"
-	"Explorer++/Explorer++/ModelessDialogList.cpp"
-	"Explorer++/Explorer++/MsgHandler.cpp"
-	"Explorer++/Explorer++/NavigationHelper.cpp"
-	"Explorer++/Explorer++/NewMenuClient.cpp"
-	"Explorer++/Explorer++/NoOpMenuHelpTextHost.cpp"
-	"Explorer++/Explorer++/OneShotTimer.cpp"
-	"Explorer++/Explorer++/OneShotTimerManager.cpp"
-	"Explorer++/Explorer++/OpenItemLocationContextMenuDelegate.cpp"
-	"Explorer++/Explorer++/OpenItemsContextMenuDelegate.cpp"
-	"Explorer++/Explorer++/OptionsDialog.cpp"
-	"Explorer++/Explorer++/OptionsPage.cpp"
-	"Explorer++/Explorer++/PasteSymLinksClient.cpp"
-	"Explorer++/Explorer++/PasteSymLinksServer.cpp"
-	"Explorer++/Explorer++/PlatformContextImpl.cpp"
-	"Explorer++/Explorer++/PluginInitialization.cpp"
-	"Explorer++/Explorer++/PluginInterface.cpp"
-	"Explorer++/Explorer++/PopupMenuView.cpp"
-	"Explorer++/Explorer++/PreservedTab.cpp"
-	"Explorer++/Explorer++/ProcessManager.cpp"
-	"Explorer++/Explorer++/RebarView.cpp"
-	"Explorer++/Explorer++/RegistryAppStorage.cpp"
-	"Explorer++/Explorer++/RegistryAppStorageFactory.cpp"
-	"Explorer++/Explorer++/RenameTabDialog.cpp"
-	"Explorer++/Explorer++/ResourceHelper.cpp"
-	"Explorer++/Explorer++/ResourceIconModel.cpp"
-	"Explorer++/Explorer++/Runtime.cpp"
-	"Explorer++/Explorer++/RuntimeHelper.cpp"
-	"Explorer++/Explorer++/ScopedBrowserCommandTarget.cpp"
-	"Explorer++/Explorer++/ScriptingDialog.cpp"
-	"Explorer++/Explorer++/SearchDialog.cpp"
-	"Explorer++/Explorer++/SearchTabsDialog.cpp"
-	"Explorer++/Explorer++/SearchTabsModel.cpp"
-	"Explorer++/Explorer++/SelectColumnsDialog.cpp"
-	"Explorer++/Explorer++/ServiceProvider.cpp"
-	"Explorer++/Explorer++/SetDefaultColumnsDialog.cpp"
-	"Explorer++/Explorer++/SetFileAttributesDialog.cpp"
-	"Explorer++/Explorer++/ShellEntry.cpp"
-	"Explorer++/Explorer++/ShellEntryCollection.cpp"
-	"Explorer++/Explorer++/ShellEnumeratorImpl.cpp"
-	"Explorer++/Explorer++/ShellIconLoaderImpl.cpp"
-	"Explorer++/Explorer++/ShellIconModel.cpp"
-	"Explorer++/Explorer++/ShellItemsMenu.cpp"
-	"Explorer++/Explorer++/ShellView.cpp"
-	"Explorer++/Explorer++/ShellWatcher.cpp"
-	"Explorer++/Explorer++/ShellWatcherManager.cpp"
-	"Explorer++/Explorer++/SortMenuBuilder.cpp"
-	"Explorer++/Explorer++/SortModeMenuMappings.cpp"
-	"Explorer++/Explorer++/SplitFileDialog.cpp"
-	"Explorer++/Explorer++/StartupCommandLineProcessor.cpp"
-	"Explorer++/Explorer++/StartupFoldersRegistryStorage.cpp"
-	"Explorer++/Explorer++/StartupFoldersXmlStorage.cpp"
-	"Explorer++/Explorer++/StartupOptionsPage.cpp"
-	"Explorer++/Explorer++/StatusBar.cpp"
-	"Explorer++/Explorer++/StatusBarView.cpp"
-	"Explorer++/Explorer++/stdafx.cpp"
-	"Explorer++/Explorer++/Storage.cpp"
-	"Explorer++/Explorer++/SystemFontHelper.cpp"
-	"Explorer++/Explorer++/Tab.cpp"
-	"Explorer++/Explorer++/TabBacking.cpp"
-	"Explorer++/Explorer++/TabContainer.cpp"
-	"Explorer++/Explorer++/TabContainerBackgroundContextMenu.cpp"
-	"Explorer++/Explorer++/TabContextMenu.cpp"
-	"Explorer++/Explorer++/TabEvents.cpp"
-	"Explorer++/Explorer++/TabHandler.cpp"
-	"Explorer++/Explorer++/TabHistoryMenu.cpp"
-	"Explorer++/Explorer++/TabList.cpp"
-	"Explorer++/Explorer++/TabParentItemsMenu.cpp"
-	"Explorer++/Explorer++/TabRegistryStorage.cpp"
-	"Explorer++/Explorer++/TabRestorer.cpp"
-	"Explorer++/Explorer++/TabRestorerMenu.cpp"
-	"Explorer++/Explorer++/TabsOptionsPage.cpp"
-	"Explorer++/Explorer++/TabView.cpp"
-	"Explorer++/Explorer++/TabXmlStorage.cpp"
-	"Explorer++/Explorer++/TaskbarThumbnails.cpp"
-	"Explorer++/Explorer++/TestHelper.cpp"
-	"Explorer++/Explorer++/Theme.cpp"
-	"Explorer++/Explorer++/ThemedTabControlPainter.cpp"
-	"Explorer++/Explorer++/ThemeManager.cpp"
-	"Explorer++/Explorer++/ThemeWindowTracker.cpp"
-	"Explorer++/Explorer++/ThirdPartyCreditsDialog.cpp"
-	"Explorer++/Explorer++/ToolbarContextMenu.cpp"
-	"Explorer++/Explorer++/ToolbarHelper.cpp"
-	"Explorer++/Explorer++/ToolbarView.cpp"
-	"Explorer++/Explorer++/TreeView.cpp"
-	"Explorer++/Explorer++/TreeViewAdapter.cpp"
-	"Explorer++/Explorer++/TreeViewNode.cpp"
-	"Explorer++/Explorer++/UIThreadExecutor.cpp"
-	"Explorer++/Explorer++/UpdateCheckDialog.cpp"
-	"Explorer++/Explorer++/Version.cpp"
-	"Explorer++/Explorer++/VersionHelper.cpp"
-	"Explorer++/Explorer++/ViewsMenuBuilder.cpp"
-	"Explorer++/Explorer++/WildcardSelectDialog.cpp"
-	"Explorer++/Explorer++/Win32ResourceLoader.cpp"
-	"Explorer++/Explorer++/WindowOptionsPage.cpp"
-	"Explorer++/Explorer++/WindowRegistryStorage.cpp"
-	"Explorer++/Explorer++/WindowStorage.cpp"
-	"Explorer++/Explorer++/WindowXmlStorage.cpp"
-	"Explorer++/Explorer++/WinMain.cpp"
-	"Explorer++/Explorer++/XmlAppStorage.cpp"
-	"Explorer++/Explorer++/XmlAppStorageFactory.cpp"
-	"Explorer++/Explorer++/Plugins/AcceleratorParser.cpp"
-    "Explorer++/Explorer++/Plugins/ApiBinding.cpp"
-    "Explorer++/Explorer++/Plugins/Event.cpp"
-    "Explorer++/Explorer++/Plugins/LuaPlugin.cpp"
-    "Explorer++/Explorer++/Plugins/Manifest.cpp"
-    "Explorer++/Explorer++/Plugins/MenuApi.cpp"
-    "Explorer++/Explorer++/Plugins/PluginCommandManager.cpp"
-    "Explorer++/Explorer++/Plugins/PluginManager.cpp"
-    "Explorer++/Explorer++/Plugins/PluginMenuManager.cpp"
-	"Explorer++/Explorer++/Plugins/CommandApi/Events/CommandInvoked.cpp"
-	"Explorer++/Explorer++/Plugins/TabsApi/TabProperties.cpp"
-	"Explorer++/Explorer++/Plugins/TabsApi/TabsApi.cpp"
-	"Explorer++/Explorer++/Plugins/TabsApi/Events/TabCreated.cpp"
-	"Explorer++/Explorer++/Plugins/TabsApi/Events/TabMoved.cpp"
-	"Explorer++/Explorer++/Plugins/TabsApi/Events/TabRemoved.cpp"
-	"Explorer++/Explorer++/Plugins/TabsApi/Events/TabUpdated.cpp"
-	"Explorer++/Explorer++/DisplayWindow/DisplayWindow.cpp"
-	"Explorer++/Explorer++/DisplayWindow/MsgHandler.cpp"
-	"Explorer++/Explorer++/ShellTreeView/DirectoryModificationHandler.cpp"
-    "Explorer++/Explorer++/ShellTreeView/DropTarget.cpp"
-    "Explorer++/Explorer++/ShellTreeView/ShellTreeNode.cpp"
-    "Explorer++/Explorer++/ShellTreeView/ShellTreeView.cpp"
-    "Explorer++/Explorer++/ShellTreeView/ShellTreeViewContextMenuDelegate.cpp"
-	"Explorer++/Explorer++/ShellBrowser/BrowsingHandler.cpp"
-    "Explorer++/Explorer++/ShellBrowser/ColumnDataRetrieval.cpp"
-    "Explorer++/Explorer++/ShellBrowser/ColumnHelper.cpp"
-    "Explorer++/Explorer++/ShellBrowser/ColumnManager.cpp"
-    "Explorer++/Explorer++/ShellBrowser/DirectoryModificationHandler.cpp"
-    "Explorer++/Explorer++/ShellBrowser/DocumentServiceProvider.cpp"
-    "Explorer++/Explorer++/ShellBrowser/DropTarget.cpp"
-    "Explorer++/Explorer++/ShellBrowser/Filtering.cpp"
-    "Explorer++/Explorer++/ShellBrowser/GroupManager.cpp"
-    "Explorer++/Explorer++/ShellBrowser/HandleThumbnails.cpp"
-    "Explorer++/Explorer++/ShellBrowser/HistoryEntry.cpp"
-    "Explorer++/Explorer++/ShellBrowser/ListView.cpp"
-    "Explorer++/Explorer++/ShellBrowser/NavigationEvents.cpp"
-    "Explorer++/Explorer++/ShellBrowser/NavigationManager.cpp"
-    "Explorer++/Explorer++/ShellBrowser/NavigationRequest.cpp"
-    "Explorer++/Explorer++/ShellBrowser/PreservedHistoryEntry.cpp"
-    "Explorer++/Explorer++/ShellBrowser/PreservedShellBrowser.cpp"
-    "Explorer++/Explorer++/ShellBrowser/ShellBrowser.cpp"
-    "Explorer++/Explorer++/ShellBrowser/ShellBrowserContextMenuDelegate.cpp"
-    "Explorer++/Explorer++/ShellBrowser/ShellBrowserEvents.cpp"
-    "Explorer++/Explorer++/ShellBrowser/ShellBrowserFactoryImpl.cpp"
-    "Explorer++/Explorer++/ShellBrowser/ShellBrowserImpl.cpp"
-    "Explorer++/Explorer++/ShellBrowser/ShellNavigationController.cpp"
-    "Explorer++/Explorer++/ShellBrowser/SortHelper.cpp"
-    "Explorer++/Explorer++/ShellBrowser/SortManager.cpp"
-    "Explorer++/Explorer++/ShellBrowser/TileView.cpp"
-    "Explorer++/Explorer++/ShellBrowser/ViewModes.cpp"
-    "Explorer++/Explorer++/ShellBrowser/WebBrowserApp.cpp"
-	"Explorer++/Explorer++/Bookmarks/BookmarkClipboard.cpp"
-    "Explorer++/Explorer++/Bookmarks/BookmarkDataExchange.cpp"
-    "Explorer++/Explorer++/Bookmarks/BookmarkDropper.cpp"
-    "Explorer++/Explorer++/Bookmarks/BookmarkHelper.cpp"
-    "Explorer++/Explorer++/Bookmarks/BookmarkIconManager.cpp"
-    "Explorer++/Explorer++/Bookmarks/BookmarkItem.cpp"
-    "Explorer++/Explorer++/Bookmarks/BookmarkNavigationController.cpp"
-    "Explorer++/Explorer++/Bookmarks/BookmarkRegistryStorage.cpp"
-    "Explorer++/Explorer++/Bookmarks/BookmarkTree.cpp"
-    "Explorer++/Explorer++/Bookmarks/BookmarkXmlStorage.cpp"
-	"Explorer++/Explorer++/Bookmarks/UI/AddBookmarkDialog.cpp"
-    "Explorer++/Explorer++/Bookmarks/UI/BookmarkColumnHelper.cpp"
-    "Explorer++/Explorer++/Bookmarks/UI/BookmarkColumnModel.cpp"
-    "Explorer++/Explorer++/Bookmarks/UI/BookmarkContextMenu.cpp"
-    "Explorer++/Explorer++/Bookmarks/UI/BookmarkDropTargetWindow.cpp"
-    "Explorer++/Explorer++/Bookmarks/UI/BookmarkListPresenter.cpp"
-    "Explorer++/Explorer++/Bookmarks/UI/BookmarkListViewItem.cpp"
-    "Explorer++/Explorer++/Bookmarks/UI/BookmarkListViewModel.cpp"
-    "Explorer++/Explorer++/Bookmarks/UI/BookmarkMenu.cpp"
-    "Explorer++/Explorer++/Bookmarks/UI/BookmarkMenuBuilder.cpp"
-    "Explorer++/Explorer++/Bookmarks/UI/BookmarkMenuController.cpp"
-    "Explorer++/Explorer++/Bookmarks/UI/BookmarkMenuDropTarget.cpp"
-    "Explorer++/Explorer++/Bookmarks/UI/BookmarkTreePresenter.cpp"
-    "Explorer++/Explorer++/Bookmarks/UI/BookmarkTreeViewAdapter.cpp"
-    "Explorer++/Explorer++/Bookmarks/UI/BookmarkTreeViewContextMenu.cpp"
-    "Explorer++/Explorer++/Bookmarks/UI/BookmarkTreeViewNode.cpp"
-    "Explorer++/Explorer++/Bookmarks/UI/BookmarksMainMenu.cpp"
-    "Explorer++/Explorer++/Bookmarks/UI/BookmarksToolbar.cpp"
-    "Explorer++/Explorer++/Bookmarks/UI/ManageBookmarksDialog.cpp"
-    "Explorer++/Explorer++/Bookmarks/UI/OrganizeBookmarksContextMenu.cpp"
-	"Explorer++/Explorer++/Bookmarks/UI/Views/BookmarksToolbarView.cpp"
+file(GLOB_RECURSE EXPLORER_SOURCES
+    "Explorer++/Explorer++/*.cpp"
 )
+
+target_sources(ExplorerPP PRIVATE
+    ${EXPLORER_SOURCES}
+    "Explorer++/Explorer++/Explorer++Main.rc"
+    "Explorer++/Explorer++/Explorer++.exe.manifest"
+)
+
+# Mirroring vcxproj exclusions for RC files
+set_source_files_properties(
+    "Explorer++/Explorer++/Explorer++.rc"
+    "Explorer++/Explorer++/Explorer++VersionInfo.rc"
+    "Explorer++/Explorer++/Explorer++_NoTranslation.rc"
+    PROPERTIES HEADER_FILE_ONLY TRUE
+)
+
 target_include_directories(ExplorerPP PRIVATE 
     "Explorer++/Explorer++"
-    "Explorer++/Helper"
-    "${CMAKE_SOURCE_DIR}"
+    "Explorer++/ThirdParty"
+    "${LUA_INCLUDE_DIR}"
 )
 
-# find_package(fmt CONFIG REQUIRED)
+target_link_libraries(ExplorerPP PRIVATE
+    Helper
+    fmt::fmt
+    cereal::cereal
+    nlohmann_json::nlohmann_json
+    sol2::sol2
+    concurrencpp::concurrencpp
+    ${LUA_LIBRARIES}
+    comctl32.lib shell32.lib gdiplus.lib msimg32.lib shlwapi.lib psapi.lib mpr.lib uxtheme.lib vfw32.lib winmm.lib urlmon.lib wininet.lib rpcrt4.lib propsys.lib msxml2.lib dwmapi.lib windowscodecs.lib dbghelp.lib
+)
 
 target_precompile_headers(ExplorerPP PRIVATE "Explorer++/Explorer++/stdafx.h")
-target_link_libraries(ExplorerPP PRIVATE Helper fmt::fmt "gdiplus.lib" "comdlg32.lib")
 
-
-# 4. Translation DLLs (Resource-only)
+# Translation DLLs
 set(LANG_CODES AR_AE CA CS DA DE EL ES FA FI FR HE HU IT JA KO NL NO PT PL PT_BR RO RU SI SV TR UK VI ZH_CN ZH_TW)
 
 foreach(lang_code ${LANG_CODES})
-    set(RC_FILE "${CMAKE_SOURCE_DIR}/Translations/Explorer++${lang_code}/Explorer++.rc")
+    set(RC_DIR "${CMAKE_SOURCE_DIR}/Translations/Explorer++${lang_code}")
+    set(RC_FILE "${RC_DIR}/Explorer++Main.rc")
+
+    if(NOT EXISTS "${RC_FILE}")
+         set(RC_FILE "${RC_DIR}/Explorer++.rc")
+    endif()
+
     if(EXISTS "${RC_FILE}")
         add_library(ExplorerPP${lang_code} SHARED "${RC_FILE}")
         set_target_properties(ExplorerPP${lang_code} PROPERTIES 
             OUTPUT_NAME "Explorer++${lang_code}" 
             PREFIX ""
-            LINK_FLAGS "/NOENTRY" # Essential for resource-only DLLs
+            LINK_FLAGS "/NOENTRY"
         )
+        target_include_directories(ExplorerPP${lang_code} PRIVATE "Explorer++/Explorer++")
     endif()
 endforeach()
